@@ -38,6 +38,13 @@ void exiting();
 void toolbox_take();
 void toolbox_place();
 void reactivateKlingon();
+void rommy2Killed();
+void randomDynamicLightFlicker(string sLightName);
+void removeMosterClip();
+void coop_updateSpawns1();
+void coop_updateSpawns2();
+void coop_updateSpawns3();
+void coop_updateSpawns4();
 
 float boolPlayerGotCode = 0;
 float integer_actorWalktoVectorIndex = 0;
@@ -54,15 +61,181 @@ float	float_barLookingAtTheStars=7;
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
-#include "maps/global_scripts/global_common.scr" 
+//hzm coop mod - chrissstrahl - include the required coop level-scripts
+/////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+void	coop_endLevel();
+entity	entityPlayerGlobal;
+float	liftSpawnDone = 0;
+
+//#include "coop_mod/matrix/main.scr"
+#include "maps/city/coopModReplacement.scr"
+#include "maps/global_scripts/global_common.scr"
+/////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+
 #include "maps/global_scripts/global_debugUtils.scr" 
 #include "maps/global_scripts/global_tricorderBase.scr" 
 #include "maps/global_scripts/global_tricorderRoute.scr" 
 #include "maps/global_scripts/global_tricorderMod.scr" 
 #include "maps/global_scripts/global_tricorderKeypad.scr"
 
+void liftGetGoing()
+{
+	$pektraqlift_triggerUse.notTriggerable();
+	$pektraqlift_triggerUse.thread("liftToggle");
+	
+	vector v1;
+	v1 = '3794 -729 -230';
+	v1 = '3818 -772 -230';
+	thread globalCoop_actor_walkToVector($pektraq,v1,"run");
+	
+	float fWwaitForAI = 1;
+	float fWait=0;
+	while(fWwaitForAI){
+		wait(0.25);
+		fWait++;
+		fWwaitForAI = 0;
+		
+		vector V;
+		V = $pektraq.getOrigin();
+		v1_z = V_z;
+		
+		if(vectorlength(V - v1) > 30 ){
+			fWwaitForAI = 1;
+		}
+		if(fWait > 20){
+			fWwaitForAI = 0;
+			thread globalCoop_level_warpEntityToVectorSafty($pektraq,v1);
+		}
+	}
+	$liftAiLeaveStop.solid();
+	
+	$pektraq.ai_off();
+	$pektraq.pushable(1);
+	$pektraq.mass(100);
+	
+	$pektraqlift_triggerUseBottom.nottriggerable();
+	$pektraqlift_triggerUse.nottriggerable();
+	$pektraqlift_triggerUseTop.nottriggerable();
+	
+	thread coop_updateSpawns3();
+
+	$pektraqliftDoors1.lock();
+	$pektraqliftDoors1.close();
+	$pektraqliftDoors1.wait(0);
+	$pektraqliftDoors2.lock();
+	$pektraqliftDoors2.close();
+	$pektraqliftDoors1.wait(0);
+	wait(1.2);
+	$pektraqlift.dmg(9999);
+	triggerEntity($pektraqlift);
+	
+	wait(3.5);
+	
+	$pektraq.ai_on();
+	
+	$pektraqliftDoors2.unlock();
+	$pektraqliftDoors2.open($world);
+	$pektraqliftDoors2.wait(-1);
+	
+	$pektraq.ai_off();
+	v1 = '3570 -716 -30';
+	thread globalCoop_actor_walkToVector($pektraq,v1,"walk");
+	
+	fWwaitForAI = 1;
+	fWait=0;
+	while(fWwaitForAI){
+		wait(0.25);
+		fWait++;
+		fWwaitForAI = 0;
+		
+		vector V;
+		V = $pektraq.getOrigin();
+		v1_z = V_z;
+		
+		if(vectorlength(V - v1) > 30 ){
+			fWwaitForAI = 1;
+		}
+		if(fWait > 20){
+			fWwaitForAI = 0;
+			thread globalCoop_level_warpEntityToVectorSafty($pektraq,v1);
+		}
+	}
+	
+	globalCoop_objectives_update("complete" , 4 , 1 );//Disable Forcefield and take Lift
+	
+	$pektraq.pushable(0);
+	$pektraq.mass(9999);
+	$pektraq.ai_on();
+	
+	wait(2);
+	
+	
+	vector vOrgy;
+	vOrgy = $pektraqlift.getOrigin();
+	if(vOrgy_z > -24){
+		$pektraqlift_triggerUseBottom.triggerable();
+	}else{
+		$pektraqlift_triggerUseTop.triggerable();
+	}
+	$aiPreventReenterLift.triggerable();
+	$pektraqlift_triggerUse.triggerable();
+}
+
+void debug_liftSequence()
+{
+	$pektraq.ai_off();
+	$pektraq.origin($f1.getOrigin());
+	$ff.hide();
+	$ff.open($world);
+	wait(1);
+	
+	$pektraq.mass(99999);
+	$pektraq.pushable(0);
+	$pektraq.actortype("teammate");
+	$pektraq.settendency("lead",0);
+	$pektraq.setTendency("follow",1);
+	$pektraq.setnodeID(666);
+	addrosterteammate1($pektraq);
+	
+	$enterLiftTrigger.requiredentity("pektraq");
+	//$enterLiftTrigger.thread("pektraqlift_callvolume");
+	
+	if(getCvarInt("g_gametype") == 0){
+		$player.origin('3610 -520 -180');
+	}else{
+		$player0.origin('3610 -520 -180');
+	}
+	
+	$ff.remove();
+	cam_fadeIn(0.25,0,0,0,1);
+	$pektraq.ai_on();
+}
+
 void main()
 {
+	globalCoop_main();
+	
+	//fade screen black, this level starts with a cinematic
+	cam_fadeout(0.01,0,0,0,1);
+	
+	soundtrack( "music/m10l2b-romulan_installation.mus" );
+	
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	//OBJECTIVES
+	
+	
+	waitForPlayer();
+	$pektraqliftPlayerClip.solid();
+
 	//set empty archetype, hence removing the current archetype that won't work for this level
 	$pektraq_standExplodeDieCrate.archetype("");
 
@@ -84,14 +257,11 @@ void main()
 	$deadbody_sfPhaserDude.origin('2604.00 -348.00 -198.00');
 	$deadbody_sfPhaserDude.anim("cin-m9l2_munro_lurok");
 
-	//structural view mode
-	$world.addAvailableViewMode("structuralintegrity");
-	
-	soundtrack( "music/dm_kw.mus" );
-	
 	thread setupAi();
-//fade screen black, this level starts with a cinematic
-	cam_fadeout(0.1,0,0,0,1);
+	
+	//structural view mode
+	$world.addAvailableViewMode("structuralintegrity");	
+	
 	$munroChellGrateOpen.solid();
 	$munroChellGrateClosed.notsolid();
 	$munroChellGrateClosed.hide();
@@ -103,6 +273,7 @@ void main()
 	
 //make em weak so they die fast by the blade
 	$rommy2.health(10);
+	$rommy2.killthread("rommy2Killed");
 	$storeroomguard.health(10);
 
 	$rommy2.mass(9999);
@@ -122,46 +293,72 @@ void main()
 	$phaser.hide();
 	$phaser_symbol2.hide();
 	$phaser_symbol2.scale(0.01);
+	
+	//make sure ai does not leave area before ready - one way monster clip
+	$preventAiFromLeaving.solid();
+	
+	//debug crap
+//thread debug_liftSequence();
+//cam_fadeIn(0.25,0,0,0,1);
+	
+	thread intro();
+	
+	thread removeMosterClip();
+	
+	$blowupDoorDynLightSparks.scale(0.0);
+	
+	//spawn a gathering area
+	//setup trigger for gathering location - allow now to finish mission
+	vector v,v2;
+	v2 = $levelEndGather.getOrigin();
+	v = $levelEndGather.getMaxs();
+	v_z = 384;
+	$levelEndGather.remove();
+	globalCoop_main_waitAFrame();
+	globalCoop_level_gatheringArea("levelEndGather","coop_endLevel",100,v,v2);
+}
+
+void randomDynamicLightFlicker(string sLightName)
+{
+	while(1)
+	{
+		$world.light_intensity("fogShaftLightDynamic",(randomFloat(0.8) + 0.2));
+		wait( randomInt(3) + 0.25 );
+		$world.light_intensity("fogShaftLightDynamic",0);
+		wait( randomInt(1) + 0.1 );
+	}
+}
+
+void removeMosterClip()
+{
+	//wait for any player to come into range
+	while(!globalCoop_check_playerInRange($preventAiFromLeaving,300)){
+		wait(0.2);
+	}
+	$preventAiFromLeaving.remove();
+	
+	//cheap hack to make them attack
+	$usedtobeawomanguard3.hurt(1);
+	wait(0.1);
+	$usedtobeawomanguard4.hurt(1);
+	$usedtobeawomanguard1.hurt(1);
+	wait(0.1);
+	$usedtobeawomanguard0.hurt(1);
+	$usedtobeawomanguard2.hurt(1);
 }
 	
 void intro()
 {
-	//for testing move player to spot
-	if( 0 ){ //getCvar("username") == "Chrissstrahl"
-		//lift Testing /////////////////////////
-		//$player.origin('3578 -548 -216');
-		//$pektraq.origin('3640 -488 -200');
-		//$ff.remove();
-		////////////////////////////////////////
-		
-		//tram testing /////////////////////////
-		$player.origin('3230 -1110 -224');
-		$pektraq.origin('3103 -1104 -224');
-		thread givethecode();
-		////////////////////////////////////////
-		
-		spawn("camera","targetname","cam1");
-		$pektraq.ai_on();
-		$pektraq.setTendency("lead",0);
-		$pektraq.setTendency("follow",1);
-		cam_fadeIn(0.25,0,0,0,1);
-		return;
-	}
-
 	$cellUseSymbol.scale(0.001); //hide
 	
 	cam_fadeIn(0.25,0,0,0,1);//dissable cinematic during development
 	//return;//dissable cinematic during development
-
-//Wait for the player to be ready (the script contimues as soon as the computer has finished loading all materials)
-	waitForPlayer();
 	
 //make door solid - was nonsolid to allow paths to connect
 	$blowupdoor.solid();
 	
 //load objectives, then inizial
-	if(getCvarInt("g_gametype") == 0)
-	{
+	if(getCvarInt("g_gametype") == 0){
 		$player.health(100);
 		$player.loadobjectives( "city5b" );
 		wait( .1 );
@@ -170,7 +367,8 @@ void intro()
 		$player.setobjectiveshow( "c5bstealth", 1 );
 		$player.setobjectiveshow( "c5bcontact", 1 );
 		$player.setobjectiveshow( "c5bgetout", 1 );
-	}
+	}	
+	
 //warp munro to area
 	$munro.anim( "conv-yes" );
 	
@@ -183,8 +381,7 @@ void intro()
 //do not do that in multiplayer, only singleplayer and solomatch
 //get the current game type from the config variables of game
 //0=sp,1=mp,2=solomatch
-	if( getCvarInt("g_gametype") == 0)
-	{
+	if( getCvarInt("g_gametype") == 0){
 		$player.hide();
 		$player.notsolid();
 	}
@@ -202,7 +399,7 @@ void intro()
 	cuecamera($cam1);
 	$pektraq.headwatch($targetnamedSoKlingonCanLookAtItForCinematic);
 	
-	if(getCvar("username") != "Chrissstrahl"){
+	//if(getCvar("username") != "Chrissstrahl"){
 	//fade screen from black back in again to normal
 		cam_fadeIn(0.25,0,0,0,1);
 	//wait for the camera to get in position
@@ -213,14 +410,18 @@ void intro()
 		cam_fadeout(0.9,0,0,0,1);
 	//wait until the camera has blacked out
 		wait(1);
-	}
+	//}
 //do cinematic commands only in singleplayer
 	noncinematic();
 	clearletterbox(0.1);
 	cueplayer();
 	releaseplayer();
-	$player.show();
-	$player.solid();
+	
+	if( getCvarInt("g_gametype") == 0){
+		$player.show();
+		$player.solid();
+	}
+	
 //remove the cinematic actor
 	$munro.remove();
 	$munro2.hide();
@@ -233,15 +434,14 @@ void intro()
 	cam_fadeIn(0.25,0,0,0,1);
 	
 	$cellUseSymbol.scale(1); //show symbol again
-	
-//chrissstrahl - test tricorder puzzle - remove this code again!
-//$player.origin('322 563 8');
+
+	globalCoop_objectives_update("incomplete" , 1 , 1 );//Escape from prison
 }
 
 void setupAi()
 //setup all NPCs that require us to do so
 {
-	$munro.killattach();
+	$munro.killattach(); //remove any weapons or devices
 	//$pektraq.anim("bar_sitting_sleep");
 	$pektraq.useActorWeapon( "none" );
 	wait(0.05);
@@ -255,11 +455,11 @@ void setupAi()
 	$pektraq.setnodeID(666);
 	addrosterteammate1($pektraq);
 //make vison ideal for the player to sneak by the romulan
-	$guard1.fov(10);
+	$guard1.fov(15);
 	$guard1.health(10);
-	$guard1.visiondistance(128);
-//give slightly more health
-//$guard.health(90);
+	$guard1.visiondistance(256);
+//give slightly more health to the guard we can us from behind to disable, so if we attack instead of stealth he will be more of a challange
+	$rommy2.health(90);
 }
 
 void vaporizeActivator()
@@ -319,9 +519,12 @@ void datapadPickup()
 	
 //register weapon in the script inventory (players respawn with this)
 	if( getCvarInt("g_gametype") == 0){
-		$player.give("models/weapons/worldmodel-rom-datapad.tik");
+		$player.give("models/weapons/worldmodel-rom-datapad-hands.tik");
 		wait(0.1);
-		$player.use("models/weapons/worldmodel-rom-datapad.tik");
+		$player.use("models/weapons/worldmodel-rom-datapad-hands.tik");
+	}else{
+		coop_string_weapon1 = "models/weapons/worldmodel-rom-datapad-hands.tik";
+		globalCoop_player_giveAll(coop_string_weapon1,1);
 	}
 }
 
@@ -341,7 +544,6 @@ void emptyChellGrate()
 void guard1_walkToEmptyChell()
 {
 //walk to node, scare player
-	$player.hudprint("");
 	$guard1.show();
 	$guard1.walkto("$guard1_emptyChellWalkto","run");
 	waitFor($guard1);
@@ -374,10 +576,10 @@ void stealth()
 //do patrol if patrol path is near
 	$guard2.settendency("patrol",1);
 //make vison ideal for the player to sneak by the romulan
-	$guard2.fov(10);
-	$guard2.visiondistance(128);
+	$guard2.fov(15);
+	$guard2.visiondistance(256);
 //give slightly more health
-	$guard2.health(90);
+	$guard2.health(30);
 }
 
 
@@ -407,8 +609,31 @@ void walkToVector(entity eActor, vector vOrigin,string sAnimName)
 }
 
 
+void cellGrateMakeSolid()
+{
+	$munroChellGrateClosed.solid();
+	
+	return;
+	entity ePlayer;
+	float fPlayerIdInUse;
+	float fCheck;
+	fCheck = 1;
+	while(fCheck){
+		fCheck = 0;
+		for(fPlayerIdInUse=0;fPlayerIdInUse<coop_integer_maxPlayers;fPlayerIdInUse++){
+			ePlayer = getentity("*"+fPlayerIdInUse);
+			if(doesEntityExist(ePlayer) && doesEntityExist($munroChellGrateClosed)){
+				if(globalCoop_check_playerSpectator(ePlayer) == 0 && globalCoop_check_isEntityInsideOfPlayer($munroChellGrateClosed,2) == 0){
+					fCheck = 1;
+				}
+			}
+		}
+	}
+	$munroChellGrateClosed.solid();
+}
+
 void solved_codepanel_trigger0()
-//puzzle solved, chell will open, klingon will react to it
+//puzzle solved, cell will open, klingon will react to it
 {
 //remove from radar
 	$datapad.missionobjective(0);
@@ -422,23 +647,49 @@ void solved_codepanel_trigger0()
 	$pektraq.angle(90);
 	$pektraq.mass(999);
 	
-//ready chell
+//ready cell
 	$munroChellGrateClosed.show();
-	$munroChellGrateClosed.solid();
+	thread cellGrateMakeSolid();	
 	$munroChellGrateOpen.remove();
 	
-//open chell door
+//open cell door
 	$munroChellDoor.unlock();
 	$munroChellDoor.open($world);
 	
+	globalCoop_objectives_update("complete" , 1 , 0 );//Escape from Jail
+	globalCoop_objectives_update("incomplete" , 2 , 1 );//find weapon
 
 //make klingon cheer
 	$pektraq.anim("cheer");
 	wait( 1 );
-	$pektraq.ai_on();
 	
 	//unlock the exit door, player may now leave this area
 	$firstExitDoor.unlock();
+	
+//make him leave cell
+	while(doesEntityExist($pektraq)){
+		if($pektraq.isWithinDistanceOf($t5,111)){ //this is a splinepath we checking distance to - does not work when using pathnode or helpernode
+			$pektraq.ai_on();
+			//$player0.hudprint("aion final\n");
+			return;
+		}
+		
+		//turn ai off and wait for dude to move, then while moving keep ai off
+		//$player0.hudprint("aioff run\n");
+		$pektraq.ai_off();
+		$pektraq.walkto("$pektraqAiOn","run"); //this is a pathnode
+		wait(1);
+		while(vectorlength($pektraq.getVelocity()) > 1){
+			//$player0.hudprint("moving\n");
+			wait(0.1);
+		}
+		//$player0.hudprint("aion\n");
+		$pektraq.ai_on();
+	}
+	
+	//[b60011] chrissstrahl - set next radar objective
+	$toolbox_symbol.missionobjective(1);
+	$pektraq.missionobjective(1);
 }
 
 void securitydoorunlock()
@@ -451,14 +702,28 @@ void securitydoorunlock()
 
 void player_detected()
 {
-	$player.setobjectivefailed( "c5bstealth", 1 );
+	return; //[b60011] chrissstrahl
+	if( getCvarInt("g_gametype") == 0){
+		$player.setobjectivefailed( "c5bstealth", 1 );
+	}
+	else{
+		globalCoop_objectives_update("failed" , 3 , 1 );//Avoid to be detected
+	}
 	wait(0.1);
 }
 
 void klingonstay()
 {
 	//munro says -> stay behind and secure the area, while I do a chicken dance
-	$player.simplePlayDialog("localization/sound/dialog/dallas01/munro_waitduct.mp3",1,128);
+	if( getCvarInt("g_gametype") == 0){
+		$player.simplePlayDialog("localization/sound/dialog/dallas01/munro_waitduct.mp3",1,128);
+	}else{
+		entity ePlayer;
+		ePlayer = globalCoop_return_playerClosestActive($pektraq);
+		if(doesEntityExist(ePlayer)){
+			ePlayer.simplePlayDialog("localization/sound/dialog/dallas01/munro_waitduct.mp3",1,128);
+		}
+	}
 	$pektraq.setTendency("follow",0);
 }
 
@@ -473,9 +738,7 @@ void storeroomunlock()
 	$storeroomdoor_use.remove();
 	
 	wait(0.15);
-	if(doesEntityExist($storeroomguard)){
-		$storeroomguard.hurt(1);
-	}
+	thread storeroomattack();
 	
 //make klingon friend follow player again
 	$pektraq.setTendency("follow",1);
@@ -491,16 +754,23 @@ void storeroomattack()
 //make rom attack player
 {
 	if(doesEntityExist($storeroomguard)){
+		$storeroomguard.ai_off();
 		$storeroomguard.turntowardsplayer();
 		$storeroomguard.aggressive(1);
-		$storeroomguard.hurt(1);
 		$storeroomguard.attackPlayer();
+		wait(0.05);
+		$storeroomguard.ai_on();
 	}
 }
 
 void door_open()
 //make the door unlock after using nearby console
 {
+	//[b60011] chrissstrahl - change radar objective
+	$door_openSymbol.missionobjective(0);
+	$phaser_symbol2.missionobjective(1);
+	globalCoop_objectives_update("complete" , 3 , 1 );//unlock door
+
 	$door.unlock();
 //open door
 	$door.open($world);
@@ -512,6 +782,8 @@ void door_open()
 	
 //make sure the romulan knows the player is there if he didn't know before
 	thread storeroomattack();
+	
+	thread randomDynamicLightFlicker();
 }
 
 void bioscannerSetup()
@@ -849,36 +1121,59 @@ void ffconduit()
 {
 //fade out cam
 	cam_fadeOut(0.25,0,0,0,1);
+	
+	$ffDynLightCeiling.bind($ffDynLightCeilingOrigin);
+	
+	//spawn camera entity, if not already spawned
+	if(!doesEntityExist($cam1)){
+		spawn("camera","targetname","cam1");
+	}
+	
+	
 	wait(0.3);
 	//do cinematic commands only in singleplayer
-	if(getFloatVar("game.isCoopServer") == 1 || getCvarInt("g_gametype") != 1)
-	{
-		cinematic();
-		freezeplayer();
-		letterbox(0.1);
-		cam_fadeIn (0.25,0,0,0,1);	
-		$cam1.follow($f1);
-		$cam1.cut();
-		wait(0.1);
-		cuecamera($cam1);
-	}
+	cinematic();
+	freezeplayer();
+	letterbox(0.1);
+	cam_fadeIn (0.25,0,0,0,1);	
+	$cam1.follow($f1);
+	$cam1.cut();
+	wait(0.1);
+	cuecamera($cam1);
+	
 	wait(0.2); //give player time to realize where the cam is
 	$exploders.selfdetonate();
 	$ffconduit.remove();
 	$conduitblowup.selfdetonate();
 	wait(0.15);
-	$ff.remove();
+	
+	$ffDynLightCeilingOrigin.rotateXdown(33);
+	$ffDynLightCeilingOrigin.time(0.1);
+	$world.light_intensity("ffDynLightCeiling",0);
+	
+	$ff.hide();
+	$ff.open($world);
+	$ff.wait(-1);
+	
+	wait(0.3);
+	
+	$world.light_intensity("ffDynLight",0);
+	
+	
 	//wait for the effect to end
-	wait(2.7);
-	//cinematics only for SP
-	if(getFloatVar("game.isCoopServer") == 1 || getCvarInt("g_gametype") != 1)
-	{
-		noncinematic();
-		clearletterbox(0.1);
-		cueplayer();
-		releaseplayer();
-	}
+	wait(2.4);
+	$ff.remove();
+
+	noncinematic();
+	clearletterbox(0.1);
+	cueplayer();
+	releaseplayer();
+	
 	cam_fadeIn (0.25,0,0,0,1);
+	
+	//[b60011] chrissstrahl - change radar objective
+	$FFcONDUITsYMBOL.missionobjective(0);
+	$pektraqlift_triggerUse.missionobjective(1);
 }
 
 void exploders()
@@ -889,7 +1184,15 @@ void exploders()
 	wait(4);
 	$exploders.selfdetonate();
 	$accesspanel.unlock();
-	$player.simplePlayDialog("localization/sound/dialog/m8l2/munro_cancloak.mp3",1,2048);
+	if( getCvarInt("g_gametype") == 0){
+		$player.simplePlayDialog("localization/sound/dialog/m8l2/munro_cancloak.mp3",1,128);
+	}else{
+		entity ePlayer;
+		ePlayer = globalCoop_return_playerClosestActive($pektraq);
+		if(doesEntityExist(ePlayer)){
+			ePlayer.simplePlayDialog("localization/sound/dialog/m8l2/munro_cancloak.mp3",1,128);
+		}
+	}
 }
 
 void sneakuponguard()
@@ -914,9 +1217,14 @@ void phaser_pickup()
 	wait(0.05);
 	ePlayer.use("models/weapons/worldmodel-Phaser-stx.tik");
 	
-	//move useable symbol
-	//$phaser_symbol.origin('2746.00 -410.00 -177.0');
-	$phaser_symbol.remove();
+	if($world.getFloatVar("level.PhaserPickedUp")){ return; }
+	$world.setFloatVar("level.PhaserPickedUp",1);
+	
+	//update objective
+	globalCoop_objectives_update("complete" , 2 , 1 );//find weapon
+	
+	$phaser_symbol.scale(0.01);
+	
 	
 	$phaser_placeTrigger.triggerable();
 	
@@ -929,6 +1237,11 @@ void phaser_pickup()
 	//place and show phaser
 	$phaser.show();
 	$phaser.setcustomshader("textures/common/fracture_small");
+	
+	//[b60011] chrissstrahl - remove trigger, do not allow multiple activations
+	if(doesEntityExist(eTrigger)){
+		eTrigger.remove();
+	}
 }
 
 void phaser()
@@ -938,24 +1251,50 @@ void phaser()
 	eTrigger = getCurrentEntity();
 	ePlayer = eTrigger.getLastActivatingEntity();
 	ePlayer.take("models/weapons/worldmodel-Phaser-stx.tik");
-
+	
+	//[b60011] chrissstrahl - change radar objective
+	//$phaser_symbol2.missionobjective(0);
+	$phaser_symbol2.remove();
+	
 	$phaser.fade(0.25, 1);
-	$phaser.clearcustomshader("textures/common/fracture_small");
 	
 	//$phaser.angels('25.000000 0.000000 0.000000');
 	//$phaser.origin('2748.50 -408.00 -197.24');
+	
+	//[b60011] chrissstrahl - take weapons again
+	globalCoop_armory_weaponUnregister	("models/weapons/worldmodel-Phaser-stx.tik");
 
 //open door
 	float fTimer = 5;
 	while(fTimer > 0){
 		centerPrint("^3WARNING: ^1Explosion in:^5 "+fTimer+"\n");
+		//make sure klingon runs away if he is to close
+		if($pektraq.isWithinDistanceOf($phaser,128)){
+			$pektraq.ai_off();
+			$pektraq.walkto("$pektraqAwayFromExplosion","run");
+		}
+		
 		wait(1);
+		$pektraq.ai_on();
 		fTimer--;
 	}
+	
+	globalCoop_player_takeAll			("models/weapons/worldmodel-Phaser-stx.tik");
 	
 	$phaseroverload.selfdetonate();
 	$crates.remove();
 	$phaser.remove();
+	
+	$world.light_intensity("blowupDoorDynLight",0);
+	$blowupDoorDynLight.moveDown(4);
+	$blowupDoorDynLight.rotateXdown(4);
+	$blowupDoorDynLight.rotateYdown(4);
+	$blowupDoorDynLight.time(0.1);
+	$blowupDoorDynLightSparks.scale(1);
+	
+	//[b60011] chrissstrahl - change radar objective
+	$FFcONDUITsYMBOL.missionobjective(1);	
+	globalCoop_objectives_update("incomplete" , 4 , 1 );//Disable Forcefield and take Lift
 }
 
 void railbreak()
@@ -988,12 +1327,32 @@ void givethecode()
 	$blastdoor.unlock();
 	$blastdoor.open($world);
 	$blastdoor.wait(-1);
-	
-	
-	
+		
 	//open door to cart that player can use
 	$cartdoor.unlock();
 	$cartdoor.open($world);
+	
+	//[b60011] chrissstrahl - change radar objective
+	$givethecodeSymbol.missionobjective(0);
+	$tram_clip2Symbol.missionobjective(1);
+	$SnIperRiffLeZZZZZZZZZ.missionobjective(1);
+	
+	globalCoop_objectives_update("complete" , 5 , 0 );//Unlock exterior and cart door
+	globalCoop_objectives_update("incomplete" , 7 , 1 );//Activate cart and leave area
+}
+
+//give player back his weapons
+void giveWeapons()
+{
+	$SnIperRiffLeZZZZZZZZZ.missionobjective(0);
+	coop_string_weapon4 = "models/weapons/worldmodel-sniperrifle.tik";
+	coop_string_weapon5 = "models/weapons/worldmodel-CompressionRifle.tik";
+	coop_string_weapon6 = "models/weapons/worldmodel-GrenadeLauncher.tik";
+	globalCoop_player_giveAll(coop_string_weapon4,1);
+	globalCoop_player_giveAll(coop_string_weapon5,1);
+	globalCoop_player_giveAll(coop_string_weapon6,1);
+	
+	globalCoop_objectives_update("complete" , 6 , 1 );//take back weapons
 }
 
 void destroyrocks()
@@ -1052,6 +1411,11 @@ void toolbox_place()
 			}
 		}
 	}
+	
+	//[b60011] chrissstrahl - change radar objective
+	$toolbox_symbol.missionobjective(0);
+	$door_openSymbol.missionobjective(1);
+	
 	$toolbox_stair.fade(0.25, 1);
 	$toolbox_stairClip.solid();
 	$vent_noEnterClip.remove();
@@ -1059,65 +1423,136 @@ void toolbox_place()
 	$toolbox_stair.clearcustomshader("textures/common/fracture_small");
 }
 
-
-//trigger inside lift was used, make lift move
-void pektraqlift()
+void liftToggle()
 {
-	//$pektraq.ai_on();
-	//$pektraq.setTendency("follow",1);
-	//$pektraq.setTendency("lead",1);
-	//$pektraq.setnodeID(999);
-	$pektraq.ai_off();
-	$pektraq.walkto("$pektraqliftPos","walk");
+	vector vOrgy;
+	vOrgy = $pektraqlift.getOrigin();
+	
+	$pektraqlift_triggerUseBottom.nottriggerable();
+	$pektraqlift_triggerUseTop.nottriggerable();
+	$pektraqlift_triggerUse.nottriggerable();
 
-	float fWait;
-	fWait = 1;
-	while(doesEntityExist($pektraq) && fWait){	
-		if(vectorLength($pektraq.getOrigin() - '3898 -680 -208') < 50){
-			fWait=0;
-		}
-		wait(0.2);
+	$pektraqliftDoors1.lock();
+	$pektraqliftDoors1.close();
+	$pektraqliftDoors1.wait(0);
+	$pektraqliftDoors2.lock();
+	$pektraqliftDoors2.close();
+	$pektraqliftDoors1.wait(0);
+	wait(1.2);
+	triggerEntity($pektraqlift);
+	wait(3);
+	
+	if(vOrgy_z > -24){
+		$pektraqliftDoors1.unlock();
+		$pektraqliftDoors1.open($world);
+		$pektraqliftDoors1.wait(-1);	
+	}else{
+		$pektraqliftDoors2.unlock();
+		$pektraqliftDoors2.open($world);
+		$pektraqliftDoors2.wait(-1);	
 	}
-	$pektraq.ai_off();
-	$pektraq.turntowardsentity($pektraqliftDoors1);
+	wait(3);
+	
+	if(vOrgy_z > -24){
+		$pektraqlift_triggerUseTop.triggerable();
+	}else{
+		$pektraqlift_triggerUseBottom.triggerable();
+	}
+	$pektraqlift_triggerUse.triggerable();
+}
+
+void pektraqlift_callvolume()
+{
+	thread coop_updateSpawns3();
+
+	entity eTrig;
+	eTrig = getCurrentEntity();
+	
+	$enterLiftTrigger.remove();
 
 	$pektraqliftDoors1.lock();
 	$pektraqliftDoors1.close();
 	wait(1.2);
-	$pektraq.ai_on();
-	
 	triggerEntity($pektraqlift);
 	wait(3);
+	
+	if(doesEntityExist($enterLiftTrigger)){$enterLiftTrigger.remove();}
 	
 	$pektraqliftDoors2.open($world);
 	$pektraqliftDoors2.wait(-1);
 	
-	$pektraq.ai_off();
-	$pektraq.walkto("$pektraqliftPosExitPre","walk");
-	waitFor($pektraq);
-	$pektraq.walkto("$pektraqliftPosExit","walk");
-	waitFor($pektraq);
+	$liftAiReEnterStop.solid();
 	
-	// $pektraq.ai_on();
-	// $pektraq.setTendency("follow",1);
-	// $pektraq.setTendency("lead",1);
-	// $pektraq.setTendency("leadslow",1);
-	// $pektraq.setnodeID(888);
-	
-	fWait = 1;
-	while(doesEntityExist($pektraq) && fWait){	
-		if(vectorLength($pektraq.getOrigin() - '3561 -725 -12') < 60){
-			fWait=0;
-		}
-		wait(0.2);
-	}
-	$pektraq.ai_on();
+	globalCoop_objectives_update("complete" , 4 , 0 );//Disable Forcefield and take Lift
+	globalCoop_objectives_update("incomplete" , 5 , 0 );//unlock exterior door
+	globalCoop_objectives_update("incomplete" , 6 , 1 );//take back weapons
 	
 	$pektraqliftDoors2.wait(2);
 	$liftPathnodeClipNextLevel.remove();
-	$pektraq.setTendency("follow",1);
-	$pektraq.setTendency("lead",0);
+	
+	//make ai leave lift
 	$pektraq.setTendency("leadslow",0);
+	$pektraq.settendency("lead",1);
+	$pektraq.setnodeID(888);
+	$pektraq.setTendency("follow",0);
+	
+	/*
+	thread globalCoop_actor_walkToVector($chell,'771 -3311 100',"walk");
+	thread globalCoop_actor_walkToVector($telsia,'765 -3387 100',"walk");
+	
+	vector v1;
+	float fWwaitForAI = 1;
+	float fWait=0;
+	while(fWwaitForAI){
+		fWait++;
+		fWwaitForAI = 0;
+		v1 = '771 -3211 75';
+		if(vectorlength($telsia.getOrigin() - v1) > 180 ){
+			fWwaitForAI = 1;
+		}
+		v1 = '771 -3311 75';
+		if(vectorlength($chell.getOrigin() - v1) > 180 ){
+			fWwaitForAI = 1;
+		}
+		if(fWait > 20){
+			fWwaitForAI = 0;
+			thread globalCoop_level_warpEntityToVectorSafty($telsia,'771 -3311 75');
+			thread globalCoop_level_warpEntityToVectorSafty($chell,'765 -3387 75');
+		}
+		wait(0.25);
+	}
+
+	$chell.allowfall(0);
+	$chell.ai_on();
+spawn("trigger_push","targetname","CoopLiftPushOffTrigger","origin",""+$EndHallwayLift.getOrigin(),"angle","180","spawnflags","4");//push only AI
+	$CoopLiftPushOffTrigger.speed(1000);
+	$CoopLiftPushOffTrigger.setSize(vSizeMin,vSizeMax);
+	*/
+}
+
+void pektraqlift_exited()
+{
+	$pektraqlift_triggerUse.triggerable();
+	
+	//[b60011] chrissstrahl - change radar objective
+	$recovertricorderdone_symbol.missionobjective(1);
+	$pektraqlift_triggerUse.missionobjective(0);
+	$pektraqlift_triggerUse.thread("liftToggle");
+	
+	vector vOrgy;
+	vOrgy = $pektraqlift.getOrigin();
+	if(vOrgy_z > -24){
+		$pektraqlift_triggerUseBottom.triggerable();
+	}else{
+		$pektraqlift_triggerUseTop.triggerable();
+	}
+	$aiPreventReenterLift.triggerable();
+	
+	//make ai leave lift
+	$pektraq.setTendency("leadslow",0);
+	$pektraq.settendency("lead",0);
+	//$pektraq.setnodeID(888);
+	$pektraq.setTendency("follow",1);
 }
 
 //pickup tricorder and phaser
@@ -1126,12 +1561,20 @@ void recovertricorderdone()
 	$tricorder_item.remove();
 	$phaser_item.remove();
 	
+	//[b60011] chrissstrahl - change radar objective
+	$givethecodeSymbol.missionobjective(1);
+	
 	//register to the armory, equips players on spawn
 	if(getCvarInt("g_gametype") == 0){
 		$player.give("models/weapons/worldmodel-Tricorder-stx.tik");
 		$player.give("models/weapons/worldmodel-Phaser-stx.tik");
 		wait(0.1);
 		$player.use("models/weapons/worldmodel-Tricorder-stx.tik");
+	}else{
+		coop_string_weapon2 = "models/weapons/worldmodel-Tricorder-stx.tik";
+		coop_string_weapon3 = "models/weapons/worldmodel-Phaser-stx.tik";
+		globalCoop_player_giveAll(coop_string_weapon2,0);
+		globalCoop_player_giveAll(coop_string_weapon3,1);
 	}
 }
 
@@ -1175,7 +1618,16 @@ void endLift()
 	//$pektraq.turntowardsplayer();
 	
 	//wait for player to position on lift
-	while(vectorlength(($player.getOrigin() - '2645 -4769 -229')) > 100){
+	entity ePlayer;
+	float fWait;
+	fWait = 1;
+	while(fWait){
+		ePlayer = globalCoop_return_playerClosestActive($endLift);
+		if(doesEntityExist(ePlayer)){
+			if(vectorlength((ePlayer.getOrigin() - '2645 -4769 -229')) < 100){
+				fWait = 0;
+			}
+		}
 		wait(0.01);
 	}
 	
@@ -1226,6 +1678,8 @@ void startTramCart()
 		}
 		thread destroyrocks();
 	}
+	wait(10);
+	$t153.missionobjective(1);
 }
 
 void unlockDoorForKlingon()
@@ -1269,6 +1723,11 @@ void noleadButFollow()
 //if player has reached the location - klingon will not lead then but follow the player
 //------------------------------------------------------------------------------
 {
+	thread globalCoop_objectives_update("incomplete" , 3 , 1 );//unlock door
+	
+	$pektraq.pushable(1);
+	$pektraq.mass(190);
+	
 	$pektraq.setTendency("lead",0);
 	$pektraq.setTendency("follow",1);
 }
@@ -1288,12 +1747,47 @@ void makeRomiesAggressive()
 		eAI = getEntity("usedtobeawomanguard"+i);
 		eAI.setvar( "manual_state" , "combat" );
 		eAI.mass(9999);		
-		//eAI.ai_on();
+		eAI.ai_on();
 	}
 	$usedtobeawomanguard0.setnodeID(3);
 	$usedtobeawomanguard0.settendency("patrol",1);
-	$usedtobeawomanguard4.hurt(1);
-	$usedtobeawomanguard2.kill();
+	//$usedtobeawomanguard4.hurt(1);
+	//$usedtobeawomanguard2.kill();
+	
+	//[b60011] chrissstrahl - make sure he follows player after combat
+	wait(7);
+	thread noleadButFollow();
+}
+
+//[b611] chrissstrahl - added spawn location update
+void coop_updateSpawnlocations1()
+//------------------------------------------------------------------------------
+//update spawn locations
+//------------------------------------------------------------------------------
+{
+	$ipd1.origin('10790 -3754 -1216');
+	$ipd2.origin('10730 -3754 -1216');
+	$ipd3.origin('10670 -3754 -1216');
+	$ipd4.origin('10610 -3754 -1216');
+	$ipd5.origin('10550 -3754 -1216');
+	$ipd6.origin('10490 -3754 -1216');
+	$ipd7.origin('10430 -3754 -1216');
+	$ipd8.origin('10786 -3554 -1216');
+	float fOrigin;
+	entity eSpot;
+	for(fOrigin=1;fOrigin++;fOrigin<7){
+		eSpot = getEntity("ipd"+fOrigin);
+		eSpot.angle(90);
+	}
+	$ipd8.angle(180);
+}
+
+void rommy2Killed()
+//------------------------------------------------------------------------------
+//if romulan gets killed bny anythink other than the use button
+//------------------------------------------------------------------------------
+{
+	if(doesEntityExist($rommy2_symbol)){ $rommy2_symbol.remove(); }
 }
 
 void levelEnd()
@@ -1302,9 +1796,120 @@ void levelEnd()
 //------------------------------------------------------------------------------
 {
 //load next map
-	wait(3);
-	stuffcmd("disconnect");
+	if(getCvarInt("g_gametype")	== 0){
+		wait(3);
+		stuffcmd("disconnect");	
+	}else{
+		thread coop_endLevel();
+	}
 }
 
+void coop_updateSpawns1()
+//------------------------------------------------------------------------------
+//Move Spawnlocations - after prison first room before you go down
+//------------------------------------------------------------------------------
+{
+	$ipd1.origin('-2345 680 8');
+	$ipd2.origin('-2391 680 8');
+	$ipd3.origin('-2436 680 8');
+	$ipd4.origin('-2482 680 8');
+	$ipd5.origin('-2528 680 8');
+	$ipd6.origin('-2528 586 8');
+	$ipd7.origin('-2528 460 8');
+	$ipd8.origin('-2528 366 8');
+	float fSpawnLoc;
+	entity eSpawnLoc;
+	for(fSpawnLoc=1;fSpawnLoc<=8;fSpawnLoc++){
+		eSpawnLoc = getEntity("$ipd"+fSpawnLoc);
+		if(doesEntityExist(eSpawnLoc)){
+			eSpawnLoc.angle(270);
+		}
+	}
+}
 
+void coop_updateSpawns2()
+//------------------------------------------------------------------------------
+//Move Spawnlocations - near the room and the shaft you have to enter
+//------------------------------------------------------------------------------
+{
+	$ipd1.origin('-424 -488 -200');
+	$ipd2.origin('-424 -288 -200');
+	$ipd3.origin('-376 -488 -200');
+	$ipd4.origin('-376 -288 -200');
+	$ipd5.origin('-328 -488 -200');
+	$ipd6.origin('-328 -288 -200');
+	$ipd7.origin('-280 -288 -200');
+	$ipd8.origin('-64 -488 -200');
+	float fSpawnLoc;
+	entity eSpawnLoc;
+	for(fSpawnLoc=1;fSpawnLoc<=8;fSpawnLoc++){
+		eSpawnLoc = getEntity("$ipd"+fSpawnLoc);
+		if(doesEntityExist(eSpawnLoc)){
+			eSpawnLoc.angle(1);
+		}
+	}
+}
+
+void coop_updateSpawns3()
+//------------------------------------------------------------------------------
+//Move Spawnlocations - lift up floor
+//------------------------------------------------------------------------------
+{
+	$ipd1.origin('3664 -656 -32');
+	$ipd2.origin('3616 -656 -32');
+	$ipd3.origin('3568 -656 -32');
+	$ipd4.origin('3520 -656 -32');
+	$ipd5.origin('3520 -760 -32');
+	$ipd6.origin('3520 -808 -32');
+	$ipd7.origin('3520 -856 -32');
+	$ipd8.origin('3520 -904 -32');
+	float fSpawnLoc;
+	entity eSpawnLoc;
+	for(fSpawnLoc=1;fSpawnLoc<=4;fSpawnLoc++){
+		eSpawnLoc = getEntity("$ipd"+fSpawnLoc);
+		if(doesEntityExist(eSpawnLoc)){
+			eSpawnLoc.angle(270);
+		}
+	}
+	for(fSpawnLoc=1;fSpawnLoc<=8;fSpawnLoc++){
+		eSpawnLoc = getEntity("$ipd"+fSpawnLoc);
+		if(doesEntityExist(eSpawnLoc)){
+			eSpawnLoc.angle(315);
+		}
+	}
+}
+
+void coop_updateSpawns4()
+//------------------------------------------------------------------------------
+//Move Spawnlocations - in tram tunnel
+//------------------------------------------------------------------------------
+{
+	$ipd1.origin('2992 -2088 -256');
+	$ipd2.origin('2992 -2040 -256');
+	$ipd3.origin('2992 -1992 -256');
+	$ipd4.origin('3056 -1960 -256');
+	$ipd5.origin('3096 -1904 -256');
+	$ipd6.origin('3152 -1846 -256');
+	$ipd7.origin('3048 -2136 -256');
+	$ipd8.origin('3104 -2187 -256');
+	float fSpawnLoc;
+	entity eSpawnLoc;
+	for(fSpawnLoc=1;fSpawnLoc<=8;fSpawnLoc++){
+		eSpawnLoc = getEntity("$ipd"+fSpawnLoc);
+		if(doesEntityExist(eSpawnLoc)){
+			eSpawnLoc.angle(315);
+		}
+	}
+}
+
+//[b611] chrissstrahl - standard coop mod handling
+void coop_endLevel()
+//------------------------------------------------------------------------------
+//Level end
+//------------------------------------------------------------------------------
+{
+	centerprint("TO BE CONTINUED\n");
+	wait(2);
+	stuffcmd("disconnect");
+}
 
